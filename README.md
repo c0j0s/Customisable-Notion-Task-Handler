@@ -64,7 +64,7 @@ This script allow you to run python code in notion page itself.
 3. Accessing global configs and outputting to notion log table.
     ```py
     # The handler object stores the configs
-    handler = TaskHandler(json.loads(sys.argv[1]))
+    handler = TaskHandler(sys.argv[1])
 
     # To access configs using table name
     x = handler.configs["debug"]

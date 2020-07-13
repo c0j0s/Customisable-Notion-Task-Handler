@@ -2,6 +2,7 @@ from notion_wrapper import NotionWrapper
 import time
 import atexit
 
+
 def init():
     try:
         global notion
@@ -17,11 +18,13 @@ def subscribe_to_task_table():
     for row in task_table.collection.get_rows():
         row.add_callback(task_callback, callback_id="task_callback")
 
+
 def task_row_callback(record, difference, changes):
     for item in difference:
         if item[0] == "add":
             for row in record.collection.get_rows():
                 row.add_callback(task_callback, callback_id="task_callback")
+
 
 def task_callback(record, changes):
     if changes[0][0] == "prop_changed":
@@ -30,14 +33,14 @@ def task_callback(record, changes):
         if activate:
             record.status = notion.write_script(record.name, record.children)
             activate = False
-            
+
         run = record.run
         record.run = False
         if run and (record.status == "Activated" or record.status == "Completed"):
             record.status = "Running"
             record.status = notion.run_script(record.name)
             run = False
-        
+
         kill = record.kill
         record.kill = False
         if kill and record.status == "Running":
@@ -45,6 +48,7 @@ def task_callback(record, changes):
             kill = False
 
         time.sleep(10)
+
 
 def main():
     try:
@@ -55,6 +59,7 @@ def main():
         input()
     except KeyboardInterrupt:
         exit()
+
 
 if __name__ == "__main__":
     main()
