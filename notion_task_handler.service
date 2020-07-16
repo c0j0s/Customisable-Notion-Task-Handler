@@ -1,0 +1,14 @@
+[Unit]
+Description=Notion Task Handler
+After=multi-user.target
+Conflicts=getty@tty1.service
+
+[Service]
+WorkingDirectory=<WorkingDirectory>
+ExecStart=/usr/bin/python3 <WorkingDirectory/Script.py>
+StandardInput=tty-force
+KillMode=process
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

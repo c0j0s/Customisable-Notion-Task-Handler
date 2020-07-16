@@ -1,6 +1,7 @@
 from notion.client import NotionClient
 from notion.block import CodeBlock
 from datetime import datetime
+import traceback
 import json
 import re
 import subprocess
@@ -12,13 +13,18 @@ import time
 class NotionWrapper:
     """ A wrapper object for easy interation with remote notion control page. """
 
+    child_process = {}
+    kill_now = False
+
     def __init__(self, local_config_file_path):
         self.__config = json.load(open(local_config_file_path))
         self.__client = NotionClient(
             token_v2=self.get_config("token"), monitor=True, start_monitoring=True
         )
         self.load_global_configs()
-        self.process = {}
+
+        signal.signal(signal.SIGINT, self.end_service)
+        signal.signal(signal.SIGTERM, self.end_service)
 
     def get_client(self):
         return self.__client
@@ -32,7 +38,11 @@ class NotionWrapper:
 
     def config_callback(self, record, changes):
         if changes[0][0] == "prop_changed":
-            self.log("Config changed: {}({})={}".format(str(record.name), str(record.data_type), str(record.value)))
+            self.warn(
+                "Config changed: {}({})={}".format(
+                    str(record.name), str(record.data_type), str(record.value)
+                )
+            )
             self.set_config(record.name, record.data_type, record.value)
             time.sleep(10)
 
@@ -57,55 +67,63 @@ class NotionWrapper:
 
     def get_table(self, table_name: str):
         """ Retrieve notion table """
-        return (
-            self.get_client()
-            .get_collection_view(self.get_config(table_name))
-            .collection
-        )
+        return self.get_table_ref(table_name).collection
 
     def get_table_ref(self, table_name: str):
+        assert (
+            self.get_config(table_name) is not None
+        ), "Table name not found in config."
         return self.get_client().get_collection_view(self.get_config(table_name))
 
-    def log(self, message: str, host: str = "Main"):
+    def debug(self, message: str, host: str = "Main", level: str = "Debug"):
+        self.__log(message, host, level)
+
+    def print(self, message: str, host: str = "Main", level: str = "Info"):
+        self.__log(message, host, level)
+
+    def warn(self, message: str, host: str = "Main", level: str = "Warning"):
+        self.__log(message, host, level)
+
+    def error(self, message: str, host: str = "Main", level: str = "Error"):
+        self.__log(message, host, level)
+
+    def __log(self, message: str, host: str, level: str):
         """ Prints log to local console and remote notion log table """
         try:
             if self.get_config("debug"):
-                print("[{}]: {}".format(datetime.now(), str(message)))
-                self.print(message,host)
+                print("[{}][{}]: {}".format(datetime.now(), level, message))
+                cv = self.get_table("log_table")
+                row = cv.add_row()
+                row.name = host
+                row.level = level
+                row.log_on = str(datetime.now())
+                row.message = message
         except KeyError:
             """ Raised due to config not loaded """
             pass
-
-    def print(self, message: str, host: str = "Main"):
-        """ Prints output to remote log table """
-        try:
-            cv = self.get_table("log_table")
-            row = cv.add_row()
-            row.name = host
-            row.log_on = str(datetime.now())
-            row.message = message
-        except KeyError:
-            """ Raised due to config not loaded """
-            pass
+        except AssertionError as ae:
+            print(str(ae))
 
     def write_script(self, file_name: str, script_content: str):
         try:
             status = "Error"
-            with open("task/" + file_name + ".py", "w") as f:
+            write_mode = "w"
+            with open("task/" + file_name + ".py", write_mode) as f:
                 for block in script_content:
                     if type(block) == CodeBlock:
                         f.write(block.title)
-                        f.close()
-                        status = "Activated"
-                        self.log(file_name + " task activated.")
+                        if write_mode == "w":
+                            write_mode = "a"
+                            f.write("\n\n#Second Code Block\n\n")
+                f.close()
+            status = "Activated"
+            self.print(file_name + " task activated.")
             return status
         except Exception as e:
-            self.log(str(e))
+            self.error(traceback.format_exc())
 
     def run_script(self, file_name: str):
         try:
-            self.log("Starting " + file_name + " task.")
-
             process = subprocess.Popen(
                 [
                     "python3",
@@ -118,9 +136,9 @@ class NotionWrapper:
                 encoding="utf-8",
                 errors="replace",
             )
-            self.process[file_name] = process.pid
-            host = file_name + " [" + str(process.pid) + "]"
-            self.log("Running: " + host)
+            self.child_process[file_name] = process.pid
+            host = "[" + str(process.pid) + "] " + file_name
+            self.print("Running: " + host)
 
             while True:
                 realtime_output = process.stdout.readline()
@@ -129,25 +147,52 @@ class NotionWrapper:
                     break
 
                 if realtime_output:
-                    self.print(realtime_output.strip(), host)
-
-            del self.process[file_name]
-            return "Completed"
+                    try:
+                        output = json.loads(realtime_output.strip())
+                        if output["level"] == "Debug":
+                            self.debug(output["message"], host)
+                        elif output["level"] == "Warning":
+                            self.warn(output["message"], host)
+                        elif output["level"] == "Error":
+                            self.error(output["message"], host)
+                        else:
+                            self.print(output["message"], host)
+                    except Exception:
+                        self.error(realtime_output.strip(), host)
+                        
         except FileExistsError as e:
-            self.log("Task script not found, Reactivate the script again.")
+            self.error("Task script not found, Reactivate the script again.")
+        except Exception as e:
+            self.error(traceback.format_exc())
+        finally:
+            return "Completed"
 
     def kill_script(self, file_name: str):
-        self.log("Terminating script: " + file_name + " -> " + str(self.process[file_name]))
+        self.print(
+            "Terminating script: "
+            + file_name
+            + " -> "
+            + str(self.child_process[file_name])
+        )
         try:
-            os.kill(int(self.process[file_name]), signal.SIGTERM)
-            del self.process[file_name]
-            return "Completed"
+            os.kill(int(self.child_process[file_name]), signal.SIGTERM)
+            if self.child_process[file_name] is not None:
+                del self.child_process[file_name]
         except Exception as e:
-            self.log("Task script unable to be terminated.")
+            self.error(traceback.format_exc())
+        finally:
+            return "Completed"
 
-    def kill_all_script(self):
-        if len(self.process.values()) > 0:
-            self.log("Ending service, terminating all child processes..")  
-            for process in self.process.values():
-                result = os.kill(int(process), signal.SIGTERM)
-        self.log("Service ended.")
+    def end_service(self, signum, frame):
+        if len(self.child_process.values()) > 0:
+            self.print("Ending service, terminating all child processes..")
+            for process in self.child_process.values():
+                try:
+                    os.kill(int(process), signal.SIGTERM)
+                except Exception:
+                    continue
+
+            for row in self.get_table("task_table").get_rows():
+                if row.status == "Running":
+                    row.status = "Completed"
+        self.kill_now = True

@@ -1,7 +1,6 @@
 from notion_wrapper import NotionWrapper
 import time
-import atexit
-
+import traceback
 
 def init():
     try:
@@ -54,10 +53,16 @@ def main():
     try:
         init()
         subscribe_to_task_table()
-        atexit.register(notion.kill_all_script)
-        notion.log("Service ready.")
-        input()
-    except KeyboardInterrupt:
+        notion.print("Service ready.")
+
+        command = ""
+        while not notion.kill_now:
+            time.sleep(60)
+
+        notion.warn("End of the program.")
+    except Exception as e:
+        notion.error(traceback.format_exc())
+    except KeyboardInterrupt as e:
         exit()
 
 
