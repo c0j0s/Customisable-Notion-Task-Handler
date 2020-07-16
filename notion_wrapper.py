@@ -6,6 +6,7 @@ import re
 import subprocess
 import os
 import signal
+import time
 
 
 class NotionWrapper:
@@ -27,6 +28,13 @@ class NotionWrapper:
         cv = self.get_table("global_configs")
         for row in cv.get_rows():
             self.set_config(row.name, row.data_type, row.value)
+            row.add_callback(self.config_callback, callback_id="config_callback")
+
+    def config_callback(self, record, changes):
+        if changes[0][0] == "prop_changed":
+            self.log("Config changed: {}({})={}".format(str(record.name), str(record.data_type), str(record.value)))
+            self.set_config(record.name, record.data_type, record.value)
+            time.sleep(10)
 
     def set_config(self, key: str, data_type: str, value: str):
         """ Stores remote config in local memory """
@@ -63,11 +71,19 @@ class NotionWrapper:
         try:
             if self.get_config("debug"):
                 print("[{}]: {}".format(datetime.now(), str(message)))
-                cv = self.get_table("log_table")
-                row = cv.add_row()
-                row.name = host
-                row.log_on = str(datetime.now())
-                row.message = message
+                self.print(message,host)
+        except KeyError:
+            """ Raised due to config not loaded """
+            pass
+
+    def print(self, message: str, host: str = "Main"):
+        """ Prints output to remote log table """
+        try:
+            cv = self.get_table("log_table")
+            row = cv.add_row()
+            row.name = host
+            row.log_on = str(datetime.now())
+            row.message = message
         except KeyError:
             """ Raised due to config not loaded """
             pass
@@ -113,7 +129,7 @@ class NotionWrapper:
                     break
 
                 if realtime_output:
-                    self.log(realtime_output.strip(), host)
+                    self.print(realtime_output.strip(), host)
 
             del self.process[file_name]
             return "Completed"
@@ -121,14 +137,17 @@ class NotionWrapper:
             self.log("Task script not found, Reactivate the script again.")
 
     def kill_script(self, file_name: str):
-        self.log("Killing script: " + file_name + " -> " + str(self.process[file_name]))
+        self.log("Terminating script: " + file_name + " -> " + str(self.process[file_name]))
         try:
             os.kill(int(self.process[file_name]), signal.SIGTERM)
             del self.process[file_name]
             return "Completed"
         except Exception as e:
-            self.log("Task script unable to be killed.")
+            self.log("Task script unable to be terminated.")
 
     def kill_all_script(self):
-        for process in self.process.values():
-            result = os.kill(int(process), signal.SIGTERM)
+        if len(self.process.values()) > 0:
+            self.log("Ending service, terminating all child processes..")  
+            for process in self.process.values():
+                result = os.kill(int(process), signal.SIGTERM)
+        self.log("Service ended.")
