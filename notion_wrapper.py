@@ -112,9 +112,10 @@ class NotionWrapper:
                 for block in script_content:
                     if type(block) == CodeBlock:
                         f.write(block.title)
+                        if write_mode == "a":
+                           f.write("\n\n#Second Code Block\n\n")
                         if write_mode == "w":
                             write_mode = "a"
-                            f.write("\n\n#Second Code Block\n\n")
                 f.close()
             status = "Activated"
             self.print(file_name + " task activated.")
@@ -192,7 +193,12 @@ class NotionWrapper:
                 except Exception:
                     continue
 
-            for row in self.get_table("task_table").get_rows():
-                if row.status == "Running":
-                    row.status = "Completed"
+        cv = self.get_table("task_table")
+        for row in cv.get_rows():
+            if row.status == "Running":
+                row.status = "Completed"
+
+            if row.name == "Main":
+                row.remove()
         self.kill_now = True
+        self.warn("End of the program.")

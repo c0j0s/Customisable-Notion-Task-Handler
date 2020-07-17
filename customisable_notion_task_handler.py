@@ -1,11 +1,20 @@
 from notion_wrapper import NotionWrapper
 import time
 import traceback
+import sys
+import os
 
 def init():
     try:
         global notion
         notion = NotionWrapper("config.json")
+
+        cv = notion.get_table("task_table")
+        if len(cv.get_rows(search="Main")) == 0:
+            row = cv.add_row()
+            row.name = "Main"
+            row.status = "Running"
+
     except FileNotFoundError:
         print("Local config file not found.")
         exit()
@@ -27,27 +36,34 @@ def task_row_callback(record, difference, changes):
 
 def task_callback(record, changes):
     if changes[0][0] == "prop_changed":
-        activate = record.activate
-        record.activate = False
-        if activate:
-            record.status = notion.write_script(record.name, record.children)
-            activate = False
+        if record.name != "Main":
+            activate = record.activate
+            record.activate = False
+            if activate:
+                record.status = notion.write_script(record.name, record.children)
+                activate = False
 
-        run = record.run
-        record.run = False
-        if run and (record.status == "Activated" or record.status == "Completed"):
-            record.status = "Running"
-            record.status = notion.run_script(record.name)
-            run = False
+            run = record.run
+            record.run = False
+            if run and (record.status == "Activated" or record.status == "Completed"):
+                record.status = "Running"
+                record.status = notion.run_script(record.name)
+                run = False
+        else:
+            record.activate = False
+            record.run = False
 
         kill = record.kill
         record.kill = False
         if kill and record.status == "Running":
-            record.status = notion.kill_script(record.name)
+            if record.name == "Main":
+                notion.warn("Terminating [Main]")
+                notion.end_service(None,None)
+            else:
+                record.status = notion.kill_script(record.name)
             kill = False
 
         time.sleep(10)
-
 
 def main():
     try:
@@ -57,13 +73,12 @@ def main():
 
         command = ""
         while not notion.kill_now:
-            time.sleep(60)
+            time.sleep(10)
 
-        notion.warn("End of the program.")
     except Exception as e:
         notion.error(traceback.format_exc())
     except KeyboardInterrupt as e:
-        exit()
+        sys.exit()
 
 
 if __name__ == "__main__":
