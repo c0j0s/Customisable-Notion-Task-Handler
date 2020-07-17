@@ -31,6 +31,7 @@ def task_row_callback(record, difference, changes):
     for item in difference:
         if item[0] == "add":
             for row in record.collection.get_rows():
+                row.remove_callbacks("task_callback")
                 row.add_callback(task_callback, callback_id="task_callback")
 
 
@@ -39,7 +40,7 @@ def task_callback(record, changes):
         if record.name != "Main":
             activate = record.activate
             record.activate = False
-            if activate:
+            if activate and record.status != "Running":
                 record.status = notion.write_script(record.name, record.children)
                 activate = False
 
