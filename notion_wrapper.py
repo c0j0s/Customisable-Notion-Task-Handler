@@ -23,7 +23,7 @@ class NotionWrapper:
         )
         self.load_global_configs()
 
-        signal.signal(signal.SIGINT, self.end_service)
+        # signal.signal(signal.SIGINT, self.end_service)
         signal.signal(signal.SIGTERM, self.end_service)
 
     def get_client(self):
@@ -200,5 +200,6 @@ class NotionWrapper:
 
             if row.name == "Main":
                 row.remove()
-        self.kill_now = True
+                
         self.warn("End of the program.")
+        self.kill_now = True

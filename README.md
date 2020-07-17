@@ -1,7 +1,7 @@
 # A Customisable Notion Task Handler
 After tinkering with the unofficial notion python api for a while, I find myself constantly switching between notion and scripting environment a lot, oftentimes for the sole purpose of testing a few new lines of codes added to the entire script.
 
-Furthermore, deployment of the service scripts to the server can be a pain, I would have to manually log onto my server, upload the file and run the script, etc. As such, I wonder if there’s a way for me to do all these unit testing, deployment in notion itself? And so this project is born.
+Furthermore, deployment of the service scripts to the server can be a pain, I would have to manually log onto my server, upload the file and run the script, etc. As such, I wonder if there’s a way for me to do all these unit testing, deployment in notion itself? And so this project was born.
 
 This project allows you to create, run, and deploy python code from notion page itself by simply running a single python script in your machine.
 
@@ -67,7 +67,7 @@ This project allows you to create, run, and deploy python code from notion page 
         [2020-07-13 23:45:10.932766]: Service ready.
         ```
 
-        ![doc/log_table_service_start.png](doc/log_table_service_start.png)
+        ![doc/log_table_service_start.png](doc/service_start_demo.gif)
 
 # Add your own custom python scripts
 
@@ -93,7 +93,6 @@ This project allows you to create, run, and deploy python code from notion page 
     # Use handler print() to write to notion log table
     handler.print("Hello World")
     ```
-
 # Running Scripts
 
 1. Before you run the script, check the activate box so that the python code is written to the server.
@@ -107,3 +106,5 @@ This project allows you to create, run, and deploy python code from notion page 
     ![doc/log_table_script_output.png](doc/log_table_script_output.png)
 
 3. If required, check `Kill` checkbox to terminate the script.
+    > `[Main]` is the parent process of all other scripts. It can neither be activated nor ran, It only can be terminated.  
+    > The script will terminate all running child processes when kill signal is issued `[Main]`.
