@@ -100,6 +100,7 @@ This project allows you to create, run, and deploy python code from notion page 
     ![doc/checkbox_activate.png](doc/checkbox_activate.png)
 
     The status will change to `Activated`.
+    > The script is not updated in realtime, therefore reactivation is needed to reflect your updated scripts.
 
 2. Check the `Run` checkbox to run the script. Output will be written in log table if `debug` option is set to `True`.
 
