@@ -125,6 +125,10 @@ class NotionWrapper:
 
     def run_script(self, file_name: str):
         try:
+            if file_name in self.child_process:
+                self.error("Task already running.")
+                return "Running"
+
             process = subprocess.Popen(
                 [
                     "python3",
@@ -160,12 +164,14 @@ class NotionWrapper:
                             self.print(output["message"], host)
                     except Exception:
                         self.error(realtime_output.strip(), host)
-                        
+            
         except FileExistsError as e:
             self.error("Task script not found, Reactivate the script again.")
         except Exception as e:
             self.error(traceback.format_exc())
         finally:
+            if self.child_process[file_name] is not None:
+                del self.child_process[file_name]
             return "Completed"
 
     def kill_script(self, file_name: str):

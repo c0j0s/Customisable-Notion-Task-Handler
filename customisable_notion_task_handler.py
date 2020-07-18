@@ -1,8 +1,10 @@
 from notion_wrapper import NotionWrapper
 import time
 import traceback
+import threading
 import sys
 import os
+
 
 def init():
     try:
@@ -23,13 +25,18 @@ def init():
 def subscribe_to_task_table():
     task_table = notion.get_table_ref("task_table")
     task_table.add_callback(task_row_callback, callback_id="task_row_callback")
+    # initial subscription
     for row in task_table.collection.get_rows():
+        if row.autorun:
+            x = threading.Thread(target=start_script, args=(row,))start()
+        row.remove_callbacks("task_callback")
         row.add_callback(task_callback, callback_id="task_callback")
 
 
 def task_row_callback(record, difference, changes):
     for item in difference:
         if item[0] == "add":
+            # resubscribe when new row added
             for row in record.collection.get_rows():
                 row.remove_callbacks("task_callback")
                 row.add_callback(task_callback, callback_id="task_callback")
@@ -47,8 +54,7 @@ def task_callback(record, changes):
             run = record.run
             record.run = False
             if run and (record.status == "Activated" or record.status == "Completed"):
-                record.status = "Running"
-                record.status = notion.run_script(record.name)
+                start_script(record)
                 run = False
         else:
             record.activate = False
@@ -65,6 +71,10 @@ def task_callback(record, changes):
             kill = False
 
         time.sleep(10)
+
+def start_script(record):
+    record.status = "Running"
+    record.status = notion.run_script(record.name)
 
 def main():
     try:
