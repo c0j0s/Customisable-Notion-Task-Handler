@@ -8,7 +8,7 @@ import subprocess
 import os
 import signal
 import time
-
+import threading
 
 class NotionWrapper:
     """ A wrapper object for easy interation with remote notion control page. """
@@ -22,8 +22,6 @@ class NotionWrapper:
             token_v2=self.get_config("token"), monitor=True, start_monitoring=True
         )
         self.load_global_configs()
-
-        # signal.signal(signal.SIGINT, self.end_service)
         signal.signal(signal.SIGTERM, self.end_service)
 
     def get_client(self):
@@ -75,6 +73,13 @@ class NotionWrapper:
         ), "Table name not found in config."
         return self.get_client().get_collection_view(self.get_config(table_name))
 
+    def clear_table(self, table_name: str):
+        cv_rows = self.get_table(table_name).get_rows()
+        for row in cv_rows:
+            row.remove()
+        time.sleep(1)
+        self.warn("{} rows removed".format(str(len(cv_rows))))
+
     def debug(self, message: str, host: str = "Main", level: str = "Debug"):
         self.__log(message, host, level)
 
@@ -91,18 +96,21 @@ class NotionWrapper:
         """ Prints log to local console and remote notion log table """
         try:
             if self.get_config("debug"):
-                print("[{}][{}]: {}".format(datetime.now(), level, message))
-                cv = self.get_table("log_table")
-                row = cv.add_row()
-                row.name = host
-                row.level = level
-                row.log_on = str(datetime.now())
-                row.message = message
+                print("[{}][{}][{}][{}]: {}".format(str(threading.get_ident()), host, datetime.now(), level, message))
+                threading.Thread(target=self.__write_to_notion, args=(host,level,message,)).start()
         except KeyError:
             """ Raised due to config not loaded """
             pass
         except AssertionError as ae:
             print(str(ae))
+
+    def __write_to_notion(self,host,level,message):
+        cv = self.get_table("log_table")
+        row = cv.add_row()
+        row.name = host
+        row.level = level
+        row.log_on = str(datetime.now())
+        row.message = message
 
     def write_script(self, file_name: str, script_content: str):
         try:
@@ -169,35 +177,36 @@ class NotionWrapper:
             self.error("Task script not found, Reactivate the script again.")
         except Exception as e:
             self.error(traceback.format_exc())
-        finally:
-            if self.child_process[file_name] is not None:
-                del self.child_process[file_name]
-            return "Completed"
+        
+        if self.child_process[file_name] is not None:
+            del self.child_process[file_name]
+        return "Completed"
 
     def kill_script(self, file_name: str):
-        self.print(
-            "Terminating script: "
-            + file_name
-            + " -> "
-            + str(self.child_process[file_name])
-        )
         try:
-            os.kill(int(self.child_process[file_name]), signal.SIGTERM)
-            if self.child_process[file_name] is not None:
+            if file_name in self.child_process:
+                self.warn(
+                    "Terminating: "
+                    + file_name
+                    + " -> "
+                    + str(self.child_process[file_name])
+                )
+                os.kill(int(self.child_process[file_name]), signal.SIGTERM)
                 del self.child_process[file_name]
+            else:
+                self.warn("Process Id not found")
+                return "Running"
+
         except Exception as e:
             self.error(traceback.format_exc())
-        finally:
-            return "Completed"
+        
+        return "Completed"
 
     def end_service(self, signum, frame):
         if len(self.child_process.values()) > 0:
             self.print("Ending service, terminating all child processes..")
             for process in self.child_process.values():
-                try:
-                    os.kill(int(process), signal.SIGTERM)
-                except Exception:
-                    continue
+                os.kill(int(process), signal.SIGTERM)
 
         cv = self.get_table("task_table")
         for row in cv.get_rows():
@@ -206,6 +215,6 @@ class NotionWrapper:
 
             if row.name == "Main":
                 row.remove()
-                
+        
         self.warn("End of the program.")
         self.kill_now = True
